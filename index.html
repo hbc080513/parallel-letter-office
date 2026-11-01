@@ -3334,8 +3334,8 @@ window.__PLO_APP_READY__ = false;
      ========================================================= */
   const DEEPSEEK_CONFIG = {
     apiKey: "",
-    endpoint: "https://parallel-letter-office-api.vercel.app/api/reply",
-    useProxy: true,
+    endpoint: "https://api.deepseek.com/chat/completions",
+    useProxy: false,
     model: "deepseek-chat",
     timeoutMs: 20000,
     temperature: 0.9,
@@ -3350,8 +3350,8 @@ window.__PLO_APP_READY__ = false;
      ========================================================= */
   const MINIMAX_CONFIG = {
     apiKey: "",
-    endpoint: "https://parallel-letter-office-api.vercel.app/api/tts",
-    useProxy: true,
+    endpoint: "https://api.minimaxi.com/v1/t2a_v2",
+    useProxy: false,
     model: "speech-02-hd",
     voiceId: "female-shaonv",
     speed: 0.9,
@@ -3777,7 +3777,7 @@ window.__PLO_APP_READY__ = false;
 
   function setModeLabel(mode) {
     const labels = {
-      demo: "LOCAL · 未配置 Key",
+      demo: "LOCAL · 本地模式",
       ready: "DEEPSEEK · 已就绪",
       thinkingAI: "AI · 正在执笔",
       thinkingLocal: "LOCAL · 正在执笔",
@@ -7216,7 +7216,6 @@ ${letter}
     setModeLabel(isDeepSeekEnabled() ? "ready" : "demo");
     setReadingState(false);
     refreshVoiceOptions();
-    probeProxyAvailability();
     setupMusic();
 
     // Chrome / Edge 的语音列表可能是异步加载的，加载完后刷新音色下拉框。
