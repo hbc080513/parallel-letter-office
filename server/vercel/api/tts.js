@@ -39,9 +39,12 @@ module.exports = async function handler(req, res) {
     return sendError(req, res, 413, "朗读文字太长，请缩短后再试。");
   }
 
-  const voiceId = ALLOWED_VOICES.has(body.voiceId) ? body.voiceId : "female-shaonv";
-  const speed = clampNumber(body.speed, 0.7, 1.1, 0.9);
-  const pitch = clampNumber(body.pitch, -6, 6, 0);
+  const voiceSetting =
+    body.voice_setting && typeof body.voice_setting === "object" ? body.voice_setting : {};
+  const requestedVoice = voiceSetting.voice_id || body.voiceId;
+  const voiceId = ALLOWED_VOICES.has(requestedVoice) ? requestedVoice : "female-shaonv";
+  const speed = clampNumber(voiceSetting.speed ?? body.speed, 0.7, 1.1, 0.9);
+  const pitch = clampNumber(voiceSetting.pitch ?? body.pitch, -6, 6, 0);
 
   const quota = checkQuota(req, "tts");
   if (!quota.ok) return sendError(req, res, 429, quota.message);
