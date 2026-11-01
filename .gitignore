@@ -1,0 +1,18 @@
+# Local secrets
+.env
+.env.*
+*.key
+*.secret
+api-keys.*
+config.local.*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local test artifacts
+.plo-*
+plo-*
+*.test.*
