@@ -1,9 +1,0 @@
-{
-  "name": "parallel-letter-office-api",
-  "version": "1.0.0",
-  "private": true,
-  "description": "Serverless API proxy for Parallel Letter Office",
-  "scripts": {
-    "dev": "vercel dev"
-  }
-}
