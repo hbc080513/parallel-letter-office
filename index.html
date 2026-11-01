@@ -3333,8 +3333,9 @@ window.__PLO_APP_READY__ = false;
          改成转发地址；请求体格式保持不变。
      ========================================================= */
   const DEEPSEEK_CONFIG = {
-    apiKey: "", // ← 在这里填入你的 DeepSeek API Key
-    endpoint: "https://api.deepseek.com/chat/completions",
+    apiKey: "",
+    endpoint: "https://parallel-letter-office-api.vercel.app/api/reply",
+    useProxy: true,
     model: "deepseek-chat",
     timeoutMs: 20000,
     temperature: 0.9,
@@ -3344,19 +3345,66 @@ window.__PLO_APP_READY__ = false;
   /* =========================================================
      MiniMax T2A 语音合成
      ---------------------------------------------------------
-     回信文字 -> MiniMax 合成 mp3 -> 页面播放。
-     direct CORS 已实测可用（Origin: null）。
-     这是本地演示，Key 会留在 HTML 中；不要公开部署这个文件。
+     回信文字 -> 服务端代理 -> MiniMax mp3 -> 页面播放。
+     Key 只存在 Vercel 环境变量里，不会进入公开页面。
      ========================================================= */
   const MINIMAX_CONFIG = {
     apiKey: "",
-    endpoint: "https://api.minimaxi.com/v1/t2a_v2",
+    endpoint: "https://parallel-letter-office-api.vercel.app/api/tts",
+    useProxy: true,
     model: "speech-02-hd",
     voiceId: "female-shaonv",
     speed: 0.9,
     volume: 1,
     pitch: 0
   };
+
+  function isDeepSeekEnabled() {
+    return Boolean(
+      DEEPSEEK_CONFIG.useProxy ||
+      (DEEPSEEK_CONFIG.apiKey && DEEPSEEK_CONFIG.apiKey.trim())
+    );
+  }
+
+  function isMiniMaxEnabled() {
+    return Boolean(
+      MINIMAX_CONFIG.useProxy ||
+      (MINIMAX_CONFIG.apiKey && MINIMAX_CONFIG.apiKey.trim())
+    );
+  }
+
+  // 如果当前网络访问不到 Vercel，3 秒内切回本地模式，
+  // 避免每封信都等到 20 秒超时。
+  async function probeProxyAvailability() {
+    if (!DEEPSEEK_CONFIG.useProxy || !DEEPSEEK_CONFIG.endpoint) return;
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      try {
+        controller.abort();
+      } catch (error) {
+        // 忽略已经结束的请求。
+      }
+    }, 3500);
+
+    try {
+      const response = await fetch(DEEPSEEK_CONFIG.endpoint, {
+        method: "OPTIONS",
+        mode: "cors",
+        signal: controller.signal
+      });
+      if (!response.ok && response.status !== 204) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+    } catch (error) {
+      DEEPSEEK_CONFIG.useProxy = false;
+      MINIMAX_CONFIG.useProxy = false;
+      setModeLabel("demo");
+      updateVoiceHint();
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }
 
   /* =========================================================
      02 / 「信件管家」System Prompt
@@ -5396,13 +5444,15 @@ ${letter}
     const timer = window.setTimeout(() => controller.abort(), DEEPSEEK_CONFIG.timeoutMs);
 
     try {
+      const headers = { "Content-Type": "application/json" };
+      if (DEEPSEEK_CONFIG.apiKey && DEEPSEEK_CONFIG.apiKey.trim()) {
+        headers.Authorization = `Bearer ${DEEPSEEK_CONFIG.apiKey.trim()}`;
+      }
+
       const response = await fetch(DEEPSEEK_CONFIG.endpoint, {
         method: "POST",
         mode: "cors",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${DEEPSEEK_CONFIG.apiKey.trim()}`
-        },
+        headers,
         body: JSON.stringify({
           model: DEEPSEEK_CONFIG.model,
           // 这里会发送「信件管家」system 提示词 + 当前收信人的风格提示 + 最近两轮对话记忆。
@@ -5634,7 +5684,7 @@ ${letter}
 
     const target = getTarget();
     const rawKey = els.targetSelect.value;
-    const usesAI = Boolean(DEEPSEEK_CONFIG.apiKey && DEEPSEEK_CONFIG.apiKey.trim());
+    const usesAI = isDeepSeekEnabled();
     const startedAt = performance.now();
     const letterAnalysis = analyzeLetter(letter);
     state.lastLetterEmotionKey = letterAnalysis.crisis ? "crisis" : letterAnalysis.key;
@@ -5881,7 +5931,7 @@ ${letter}
   }
 
   function updateVoiceHint() {
-    if (MINIMAX_CONFIG.apiKey && MINIMAX_CONFIG.endpoint) {
+    if (isMiniMaxEnabled() && MINIMAX_CONFIG.endpoint) {
       els.voiceHint.textContent = "MiniMax · 温柔少女声合成；下方音色仅在合成失败时备用。";
       return;
     }
@@ -6365,7 +6415,7 @@ ${letter}
   }
 
   async function startMiniMaxReading(text) {
-    if (!MINIMAX_CONFIG.apiKey || !MINIMAX_CONFIG.endpoint) return false;
+    if (!isMiniMaxEnabled() || !MINIMAX_CONFIG.endpoint) return false;
 
     const controller = new AbortController();
     const token = ++state.ttsRequestToken;
@@ -6383,12 +6433,14 @@ ${letter}
     }, 18000);
 
     try {
+      const headers = { "Content-Type": "application/json" };
+      if (MINIMAX_CONFIG.apiKey && MINIMAX_CONFIG.apiKey.trim()) {
+        headers.Authorization = `Bearer ${MINIMAX_CONFIG.apiKey.trim()}`;
+      }
+
       const response = await fetch(MINIMAX_CONFIG.endpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${MINIMAX_CONFIG.apiKey}`
-        },
+        headers,
         body: JSON.stringify({
           model: MINIMAX_CONFIG.model,
           text,
@@ -6493,7 +6545,7 @@ ${letter}
     // 开始新的一段朗读前，清掉上一段可能残留的计时器、语音和音频。
     stopReading();
 
-    if (MINIMAX_CONFIG.apiKey && MINIMAX_CONFIG.endpoint) {
+    if (isMiniMaxEnabled() && MINIMAX_CONFIG.endpoint) {
       const started = await startMiniMaxReading(state.lastReply);
       if (started) return;
     }
@@ -7123,7 +7175,7 @@ ${letter}
     setSendStatus("");
     els.deliveryNote.innerHTML = '<span class="status-dot" aria-hidden="true"></span><span>信封已备好，等你的下一句话。</span>';
 
-    if (DEEPSEEK_CONFIG.apiKey && DEEPSEEK_CONFIG.apiKey.trim()) {
+    if (isDeepSeekEnabled()) {
       setModeLabel("ready");
     } else {
       setModeLabel("demo");
@@ -7161,9 +7213,10 @@ ${letter}
     resizeLetterInput();
     refreshSendButton();
     showView("empty");
-    setModeLabel(DEEPSEEK_CONFIG.apiKey && DEEPSEEK_CONFIG.apiKey.trim() ? "ready" : "demo");
+    setModeLabel(isDeepSeekEnabled() ? "ready" : "demo");
     setReadingState(false);
     refreshVoiceOptions();
+    probeProxyAvailability();
     setupMusic();
 
     // Chrome / Edge 的语音列表可能是异步加载的，加载完后刷新音色下拉框。
